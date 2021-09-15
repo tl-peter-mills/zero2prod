@@ -14,6 +14,11 @@ name = "zero2prod"
 
 [dependencies]
 actix-web = "4.0.0-beta.8"
+# We need the optional `derive`feature to use `serde`'s procedural macros:
+# `#[derive(Serialize)]`and `#[derive(Deserialize)]`.
+# The feature is not enabled by default to avoid pulling in
+# unnecessary dependencies for projects that do not need it.
+serde = { version = "1", features = ["derive"]}
 
 [dev-dependencies]
 actix-rt = "2"
