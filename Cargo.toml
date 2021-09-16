@@ -13,7 +13,7 @@ path = "src/main.rs"
 name = "zero2prod"
 
 [dependencies]
-actix-web = "4.0.0-beta.8"
+actix-web = "4.0.0-beta.9"
 config = "0.11.0"
 # We need the optional `derive`feature to use `serde`'s procedural macros:
 # `#[derive(Serialize)]`and `#[derive(Deserialize)]`.
