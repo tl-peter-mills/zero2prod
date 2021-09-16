@@ -1,8 +1,8 @@
-use std::net::TcpListener;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
+use std::net::TcpListener;
+use uuid::Uuid;
 use zero2prod::configuration::{get_configuration, DatabaseSettings};
 use zero2prod::startup::run;
-use uuid::Uuid;
 
 #[actix_rt::test]
 async fn health_check_works() {
@@ -12,7 +12,8 @@ async fn health_check_works() {
     let client = reqwest::Client::new();
 
     // Act
-    let response = client.get(&format!("{}/health_check", &test_app.address))
+    let response = client
+        .get(&format!("{}/health_check", &test_app.address))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -56,9 +57,9 @@ async fn subscribe_returns_a_400_when_data_is_missing() {
     let test_app = spawn_app().await;
     let client = reqwest::Client::new();
     let test_cases = vec![
-        ("name=le%20quin", "missing the email")  ,
+        ("name=le%20quin", "missing the email"),
         ("email=ursula_le_guin%40gmail.com", "missing the name"),
-        ("", "missing both email and name")
+        ("", "missing both email and name"),
     ];
 
     for (invalid_body, test_failure_message) in test_cases {
@@ -96,15 +97,13 @@ async fn spawn_app() -> TestApp {
     configuration.database.database_name = Uuid::new_v4().to_string();
     let connection_pool = configure_database(&configuration.database).await;
 
-
-    let server = run(listener, connection_pool.clone())
-        .expect("Failed to bind address");
+    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
 
     let _ = tokio::spawn(server);
 
     TestApp {
         address,
-        db_pool: connection_pool
+        db_pool: connection_pool,
     }
 }
 
@@ -112,7 +111,8 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let mut connection = PgConnection::connect(&config.connection_string_without_db())
         .await
         .expect("Failed to connect to Postgres.");
-    connection.execute(&*format!(r#"CREATE DATABASE "{}";"#, config.database_name))
+    connection
+        .execute(&*format!(r#"CREATE DATABASE "{}";"#, config.database_name))
         .await
         .expect("Failed to create database");
 
