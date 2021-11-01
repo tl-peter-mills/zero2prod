@@ -1,7 +1,7 @@
-use std::convert:: {TryFrom, TryInto};
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::ConnectOptions;
+use std::convert::{TryFrom, TryInto};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -29,8 +29,8 @@ pub struct ApplicationSettings {
 
 impl DatabaseSettings {
     pub fn with_db(&self) -> PgConnectOptions {
-        let mut options =self.without_db().database(&self.database_name);
-        options.log_statements(log::LevelFilter:: Trace);
+        let mut options = self.without_db().database(&self.database_name);
+        options.log_statements(log::LevelFilter::Trace);
         options
     }
 
@@ -58,7 +58,7 @@ pub enum Environment {
 impl Environment {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Environment::Local=> "local",
+            Environment::Local => "local",
             Environment::Production => "production",
         }
     }
@@ -74,7 +74,7 @@ impl TryFrom<String> for Environment {
             other => Err(format!(
                 "{} is not a supported environment. Use either `local` or `production`.",
                 other
-            ))
+            )),
         }
     }
 }
