@@ -5,22 +5,17 @@ pub struct EmailClient {
     http_client: Client,
     base_url: reqwest::Url,
     sender: SubscriberEmail,
-    authorization_token: String
+    authorization_token: String,
 }
 
 impl EmailClient {
-    pub fn new(
-        base_url: String,
-        sender: SubscriberEmail,
-        authorization_token: String
-    ) -> Self {
-        let base_url = reqwest::Url::parse(&base_url)
-            .expect("Invalid base url.");
+    pub fn new(base_url: String, sender: SubscriberEmail, authorization_token: String) -> Self {
+        let base_url = reqwest::Url::parse(&base_url).expect("Invalid base url.");
         Self {
             http_client: Client::new(),
             base_url,
             sender,
-            authorization_token
+            authorization_token,
         }
     }
 
@@ -29,7 +24,7 @@ impl EmailClient {
         recipient: SubscriberEmail,
         subject: &str,
         html_content: &str,
-        text_content: &str
+        text_content: &str,
     ) -> Result<(), reqwest::Error> {
         let url = self.base_url.join("/email").unwrap();
 
@@ -41,8 +36,7 @@ impl EmailClient {
             text_body: text_content,
         };
 
-        self
-            .http_client
+        self.http_client
             .post(url)
             .header("X-Postmark-Server-Token", &self.authorization_token)
             .json(&request_body)
@@ -64,20 +58,19 @@ struct SendEmailRequest<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain:: SubscriberEmail;
-    use crate::email_client:: EmailClient;
-    use fake::faker::internet::en:: SafeEmail;
-    use fake::faker::lorem::en:: {Paragraph, Sentence};
-    use fake:: {Fake, Faker};
-    use wiremock::matchers::{header, header_exists, path, method};
-    use wiremock:: {Mock, MockServer, ResponseTemplate, Request};
+    use crate::domain::SubscriberEmail;
+    use crate::email_client::EmailClient;
+    use fake::faker::internet::en::SafeEmail;
+    use fake::faker::lorem::en::{Paragraph, Sentence};
+    use fake::{Fake, Faker};
+    use wiremock::matchers::{header, header_exists, method, path};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
     struct SendEmailBodyMatcher;
 
     impl wiremock::Match for SendEmailBodyMatcher {
         fn matches(&self, request: &Request) -> bool {
-            let result: Result<serde_json::Value, _> =
-                serde_json::from_slice(&request.body);
+            let result: Result<serde_json::Value, _> = serde_json::from_slice(&request.body);
 
             if let Ok(body) = result {
                 body.get("From").is_some()
