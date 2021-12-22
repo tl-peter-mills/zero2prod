@@ -36,7 +36,7 @@ async fn subscribe_persists_the_new_subscriber() {
         .await;
 
     // Act
-    let response = test_app.post_subscriptions(request_body.into()).await;
+    test_app.post_subscriptions(request_body.into()).await;
 
     // Assert
     let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
