@@ -4,6 +4,7 @@ use chrono::Utc;
 use sqlx::PgPool;
 use std::convert::{TryFrom, TryInto};
 use uuid::Uuid;
+use crate::email_client::EmailClient;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -24,21 +25,43 @@ impl TryFrom<FormData> for NewSubscriber {
 #[allow(clippy::async_yields_async)]
 #[tracing::instrument(
     name = "Adding a new subscriber",
-    skip(form, db_pool),
+    skip(form, db_pool, email_client),
     fields(
         subscriber_email = %form.email,
         subscriber_name= %form.name
     )
 )]
-pub async fn subscribe(form: web::Form<FormData>, db_pool: web::Data<PgPool>) -> HttpResponse {
+pub async fn subscribe(
+    form: web::Form<FormData>,
+    db_pool: web::Data<PgPool>,
+    email_client: web::Data<EmailClient>,
+) -> HttpResponse {
     let new_subscriber = match form.0.try_into() {
         Ok(subscriber) => subscriber,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
-    match insert_subscriber(&db_pool, &new_subscriber).await {
-        Ok(_) => HttpResponse::Ok().finish(),
-        Err(_) => HttpResponse::InternalServerError().finish(),
+    if insert_subscriber(&db_pool, &new_subscriber).await.is_err() {
+        return HttpResponse::InternalServerError().finish();
     }
+    let confirmation_link = "https://my-api.com/subscriptions/confirm";
+    if email_client
+        .send_email(
+            new_subscriber.email,
+            "Welcome!",
+            &format!(
+                "Welcome to our newsletter!<br />\
+                <a href=\"{}\">Confirm your subscription.</a>",
+                confirmation_link
+            ),
+            &format!(
+                "Welcome to our newsletter!\n visit {} to confirm your subscription",
+                confirmation_link
+            ),
+    ).await.is_err() {
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    HttpResponse::Ok().finish()
 }
 
 #[tracing::instrument(
