@@ -45,10 +45,11 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
     };
 
     let raw_confirmation_link = &get_link(&body["HtmlBody"].as_str().unwrap());
-    let confirmation_link = Url::parse(raw_confirmation_link).unwrap();
+    let mut confirmation_link = Url::parse(raw_confirmation_link).unwrap();
 
     // Ensure we are only calling localhost
     assert_eq!(confirmation_link.host_str().unwrap(), "127.0.0.1");
+    confirmation_link.set_port(Some(test_app.port)).unwrap();
 
     // Act
     let response = reqwest::get(confirmation_link).await.unwrap();
