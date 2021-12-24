@@ -42,10 +42,15 @@ pub async fn subscribe(
         Ok(subscriber) => subscriber,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
+
     if insert_subscriber(&db_pool, &new_subscriber).await.is_err() {
         return HttpResponse::InternalServerError().finish();
     }
-    if send_confirmation_email(&email_client, new_subscriber, &base_url.0)
+    if send_confirmation_email(
+        &email_client,
+        new_subscriber,
+        &base_url.0
+    )
         .await
         .is_err()
     {
