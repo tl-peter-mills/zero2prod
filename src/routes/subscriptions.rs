@@ -2,7 +2,7 @@ use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction, Postgres};
 use std::convert::{TryFrom, TryInto};
 use uuid::Uuid;
 use crate::startup::ApplicationBaseUrl;
@@ -40,23 +40,36 @@ pub async fn subscribe(
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> HttpResponse {
-    let new_subscriber = match form.0.try_into() {
+    let new_subscriber : NewSubscriber = match form.0.try_into() {
         Ok(subscriber) => subscriber,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
-
-    let subscriber_id = match insert_subscriber(&db_pool, &new_subscriber).await {
-        Ok(subscriber_id) => subscriber_id,
+    let mut transaction = match db_pool.begin().await {
+        Ok(transaction) => transaction,
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
 
-    let subscription_token = generate_subscription_token();
-    if store_token(&db_pool, subscriber_id, &subscription_token)
-        .await
-        .is_err()
-    {
-        return HttpResponse::InternalServerError().finish();
-    }
+    let subscription_token = match get_token_from_email(&mut transaction, new_subscriber.email.as_ref()).await {
+        Ok(subscription_token) => match subscription_token {
+            None => {
+                let subscriber_id = match insert_subscriber(&mut transaction, &new_subscriber).await {
+                    Ok(subscriber_id) => subscriber_id,
+                    Err(_) => return HttpResponse::InternalServerError().finish(),
+                };
+                let subscription_token = generate_subscription_token();
+                if store_token(&mut transaction, subscriber_id, &subscription_token)
+                    .await
+                    .is_err()
+                {
+                    return HttpResponse::InternalServerError().finish();
+                }
+
+                subscription_token
+            },
+            Some(subscription_token) => subscription_token
+        },
+        Err(_) => return HttpResponse::InternalServerError().finish()
+    };
 
     if send_confirmation_email(
         &email_client,
@@ -70,15 +83,19 @@ pub async fn subscribe(
         return HttpResponse::InternalServerError().finish();
     }
 
+    if transaction.commit().await.is_err() {
+        return HttpResponse:: InternalServerError().finish();
+    }
+
     HttpResponse::Ok().finish()
 }
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(new_subscriber, db_pool)
+    skip(new_subscriber, transaction)
 )]
 pub async fn insert_subscriber(
-    db_pool: &PgPool,
+    transaction: &mut Transaction<'_, Postgres>,
     new_subscriber: &NewSubscriber,
 ) -> Result<Uuid, sqlx::Error> {
     let subscriber_id = Uuid::new_v4();
@@ -90,7 +107,7 @@ pub async fn insert_subscriber(
         new_subscriber.name.as_ref(),
         Utc::now()
     )
-    .execute(db_pool)
+    .execute(transaction)
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
@@ -130,22 +147,47 @@ pub async fn send_confirmation_email(
 
 #[tracing::instrument(
     name = "Store subscription token in the database",
-    skip(db_pool, subscription_token)
+    skip(transaction, subscription_token)
 )]
-async fn store_token(db_pool: &PgPool, subscriber_id: Uuid, subscription_token: &str) -> Result<(), sqlx::Error> {
+async fn store_token(
+    transaction: &mut Transaction<'_, Postgres>,
+    subscriber_id: Uuid,
+    subscription_token: &str
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"INSERT INTO subscription_tokens (subscription_token, subscriber_id)
         VALUES ($1, $2)"#,
         subscription_token,
         subscriber_id,
     )
-        .execute(db_pool)
+        .execute(transaction)
         .await
         .map_err(|e| {
             tracing::error!("Failed to execute query: {:?}", e);
             e
         })?;
     Ok(())
+}
+
+#[tracing::instrument(
+    name = "Get the subscription_token for an email",
+    skip(transaction, email)
+)]
+pub async fn get_token_from_email(
+    transaction: &mut Transaction<'_, Postgres>,
+    email: &str
+) -> Result<Option<String>, sqlx::Error> {
+    let result = sqlx::query! (
+        r#"SELECT subscription_token FROM subscription_tokens JOIN subscriptions ON subscription_tokens.subscriber_id=subscriptions.id WHERE email = $1"#,
+        email,
+    )
+        .fetch_optional(transaction)
+        .await
+        .map_err(|e| {
+            tracing::error! ("Failed to execute query: {:?}", e);
+            e
+        })?;
+    Ok(result.map(|r| r.subscription_token))
 }
 
 fn generate_subscription_token() -> String {

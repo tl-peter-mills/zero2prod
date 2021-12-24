@@ -1,6 +1,7 @@
 use crate::helpers::spawn_app;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
+use rand::Rng;
 
 #[actix_rt::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -113,8 +114,27 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
 
     // Act
     test_app.post_subscriptions(body.into()).await;
+}
 
-    // Assert
+#[actix_rt::test]
+async fn subscribing_multiple_times_sends_multiple_confirmation_emails() {
+    // Arrange
+    let test_app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+
+    let times_clicked = rand::thread_rng().gen_range(2..10);
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(times_clicked)
+        .mount(&test_app.email_server)
+        .await;
+
+    // Act
+    for _ in 0..times_clicked {
+        test_app.post_subscriptions(body.into()).await;
+    }
 }
 
 #[actix_rt::test]
@@ -138,4 +158,37 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
     let confirmation_links = test_app.get_confirmation_links(&email_request);
 
     assert_eq!(confirmation_links.html, confirmation_links.plain_text);
+}
+
+#[actix_rt::test]
+async fn subscribing_multiple_times_sends_the_same_confirmation_link_each_time() {
+    // Arrange
+    let test_app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+
+    let times_clicked = rand::thread_rng().gen_range(2..10);
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(times_clicked)
+        .mount(&test_app.email_server)
+        .await;
+
+    // Act
+    for _ in 0..times_clicked {
+        test_app.post_subscriptions(body.into()).await;
+    }
+
+    // Assert
+    let first_request = &test_app.email_server.received_requests().await.unwrap()[0];
+    let first_confirmation_links = test_app.get_confirmation_links(&first_request);
+
+    for i in 1..times_clicked {
+        let email_request = &test_app.email_server.received_requests().await.unwrap()[i as usize];
+        let confirmation_links = test_app.get_confirmation_links(&email_request);
+
+        assert_eq!(first_confirmation_links.html, confirmation_links.html);
+        assert_eq!(first_confirmation_links.plain_text, confirmation_links.plain_text);
+    }
 }
