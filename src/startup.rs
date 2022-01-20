@@ -48,7 +48,7 @@ impl Application {
             listener,
             connection_pool,
             email_client,
-            configuration.application.base_url
+            configuration.application.base_url,
         )?;
 
         Ok(Self { port, server })
@@ -73,7 +73,7 @@ fn run(
 ) -> Result<Server, std::io::Error> {
     let db_pool = Data::new(db_pool);
     let email_client = Data::new(email_client);
-    let base_url = Data:: new(ApplicationBaseUrl(base_url));
+    let base_url = Data::new(ApplicationBaseUrl(base_url));
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())

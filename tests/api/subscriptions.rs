@@ -1,7 +1,7 @@
 use crate::helpers::spawn_app;
+use rand::Rng;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
-use rand::Rng;
 
 #[actix_rt::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
@@ -189,6 +189,9 @@ async fn subscribing_multiple_times_sends_the_same_confirmation_link_each_time()
         let confirmation_links = test_app.get_confirmation_links(&email_request);
 
         assert_eq!(first_confirmation_links.html, confirmation_links.html);
-        assert_eq!(first_confirmation_links.plain_text, confirmation_links.plain_text);
+        assert_eq!(
+            first_confirmation_links.plain_text,
+            confirmation_links.plain_text
+        );
     }
 }

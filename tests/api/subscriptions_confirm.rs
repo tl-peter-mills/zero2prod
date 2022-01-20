@@ -1,8 +1,8 @@
 use crate::helpers::spawn_app;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, ResponseTemplate};
 use rand::Rng;
 use sqlx::PgPool;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
 
 #[actix_rt::test]
 async fn confirmations_without_token_are_rejected_with_a_400() {
@@ -118,19 +118,19 @@ async fn following_a_confirmation_link_with_an_unknown_token_returns_unauthorize
 
     let email_request = &test_app.email_server.received_requests().await.unwrap()[0];
     let mut confirmation_links = test_app.get_confirmation_links(&email_request);
-    confirmation_links.html.set_query(Some("subscription_token=unknown-token"));
+    confirmation_links
+        .html
+        .set_query(Some("subscription_token=unknown-token"));
 
     // Act
-    let response = reqwest::get(confirmation_links.html)
-        .await
-        .unwrap();
+    let response = reqwest::get(confirmation_links.html).await.unwrap();
 
     // Assert
     assert_eq!(response.status().as_u16(), 401)
 }
 
 async fn assert_subscriber_saved(db_pool: &PgPool) {
-    let saved = sqlx::query! ("SELECT email, name, status FROM subscriptions",)
+    let saved = sqlx::query!("SELECT email, name, status FROM subscriptions",)
         .fetch_one(db_pool)
         .await
         .expect("Failed to fetch saved subscription.");
