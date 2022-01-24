@@ -1,7 +1,7 @@
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpResponse, ResponseError};
 use chrono::Utc;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -39,39 +39,33 @@ pub async fn subscribe(
     db_pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
-) -> HttpResponse {
+) -> Result<HttpResponse, actix_web::Error> {
     let new_subscriber: NewSubscriber = match form.0.try_into() {
         Ok(subscriber) => subscriber,
-        Err(_) => return HttpResponse::BadRequest().finish(),
+        Err(_) => return Ok(HttpResponse::BadRequest().finish()),
     };
     let mut transaction = match db_pool.begin().await {
         Ok(transaction) => transaction,
-        Err(_) => return HttpResponse::InternalServerError().finish(),
+        Err(_) => return Ok(HttpResponse::InternalServerError().finish()),
     };
 
-    let subscription_token =
-        match get_token_from_email(&mut transaction, new_subscriber.email.as_ref()).await {
-            Ok(subscription_token) => match subscription_token {
-                None => {
-                    let subscriber_id =
-                        match insert_subscriber(&mut transaction, &new_subscriber).await {
-                            Ok(subscriber_id) => subscriber_id,
-                            Err(_) => return HttpResponse::InternalServerError().finish(),
-                        };
-                    let subscription_token = generate_subscription_token();
-                    if store_token(&mut transaction, subscriber_id, &subscription_token)
-                        .await
-                        .is_err()
-                    {
-                        return HttpResponse::InternalServerError().finish();
-                    }
+    let token_from_email = get_token_from_email(&mut transaction, new_subscriber.email.as_ref()).await?;
 
-                    subscription_token
-                }
-                Some(subscription_token) => subscription_token,
-            },
-            Err(_) => return HttpResponse::InternalServerError().finish(),
-        };
+    let subscription_token = match token_from_email {
+        None => {
+            let subscriber_id =
+            //TODO refactor with similar error implementation
+                match insert_subscriber(&mut transaction, &new_subscriber).await {
+                    Ok(subscriber_id) => subscriber_id,
+                    Err(_) => return Ok(HttpResponse::InternalServerError().finish()),
+                };
+            let subscription_token = generate_subscription_token();
+            store_token(&mut transaction, subscriber_id, &subscription_token).await?;
+
+            subscription_token
+        }
+        Some(subscription_token) => subscription_token,
+    };
 
     if send_confirmation_email(
         &email_client,
@@ -82,14 +76,14 @@ pub async fn subscribe(
     .await
     .is_err()
     {
-        return HttpResponse::InternalServerError().finish();
+        return Ok(HttpResponse::InternalServerError().finish());
     }
 
     if transaction.commit().await.is_err() {
-        return HttpResponse::InternalServerError().finish();
+        return Ok(HttpResponse::InternalServerError().finish());
     }
 
-    HttpResponse::Ok().finish()
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[tracing::instrument(
@@ -154,7 +148,7 @@ async fn store_token(
     transaction: &mut Transaction<'_, Postgres>,
     subscriber_id: Uuid,
     subscription_token: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), StoreTokenError> {
     sqlx::query!(
         r#"INSERT INTO subscription_tokens (subscription_token, subscriber_id)
         VALUES ($1, $2)"#,
@@ -165,8 +159,46 @@ async fn store_token(
     .await
     .map_err(|e| {
         tracing::error!("Failed to execute query: {:?}", e);
-        e
+        StoreTokenError(e)
     })?;
+    Ok(())
+}
+
+pub struct StoreTokenError(sqlx::Error);
+
+impl std::fmt::Display for StoreTokenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "A database error was encountered while trying to store a subscription token."
+        )
+    }
+}
+
+impl ResponseError for StoreTokenError {}
+
+impl std::error::Error for StoreTokenError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
+impl std::fmt::Debug for StoreTokenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        error_chain_fmt(self, f)
+    }
+}
+
+fn error_chain_fmt(
+    e: &impl std::error::Error,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
+    writeln!(f, "{}\n", e)?;
+    let mut current = e.source();
+    while let Some(cause) = current {
+        writeln!(f, "Caused by:\n\t{}", cause)?;
+        current = cause.source();
+    }
     Ok(())
 }
 
@@ -177,7 +209,7 @@ async fn store_token(
 pub async fn get_token_from_email(
     transaction: &mut Transaction<'_, Postgres>,
     email: &str,
-) -> Result<Option<String>, sqlx::Error> {
+) -> Result<Option<String>, GetTokenFromEmailError> {
     let result = sqlx::query! (
         r#"SELECT subscription_token FROM subscription_tokens JOIN subscriptions ON subscription_tokens.subscriber_id=subscriptions.id WHERE email = $1"#,
         email,
@@ -186,10 +218,25 @@ pub async fn get_token_from_email(
         .await
         .map_err(|e| {
             tracing::error! ("Failed to execute query: {:?}", e);
-            e
+            GetTokenFromEmailError(e)
         })?;
     Ok(result.map(|r| r.subscription_token))
 }
+
+// TODO whatever you do to StoreTokenError you should also do here!!
+#[derive(Debug)]
+pub struct GetTokenFromEmailError(sqlx::Error);
+
+impl std::fmt::Display for GetTokenFromEmailError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "A database error was encountered while trying to get subscription tokens with an email."
+        )
+    }
+}
+
+impl ResponseError for GetTokenFromEmailError {}
 
 fn generate_subscription_token() -> String {
     let mut rng = thread_rng();

@@ -195,3 +195,22 @@ async fn subscribing_multiple_times_sends_the_same_confirmation_link_each_time()
         );
     }
 }
+
+#[actix_rt::test]
+async fn subscribe_fails_if_there_is_a_fatal_database_error() {
+    // Arrange
+    let test_app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+
+    // Sabotage the DB
+    sqlx::query!("ALTER TABLE subscription_tokens DROP COLUMN subscription_token;",)
+        .execute(&test_app.db_pool)
+        .await
+        .unwrap();
+
+    // Act
+    let response = test_app.post_subscriptions(body.into()).await;
+
+    // Assert
+    assert_eq!(response.status().as_u16(), 500);
+}
