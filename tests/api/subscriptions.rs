@@ -155,7 +155,7 @@ async fn subscribe_sends_a_confirmation_email_with_a_link() {
 
     // Assert
     let email_request = &test_app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = test_app.get_confirmation_links(&email_request);
+    let confirmation_links = test_app.get_confirmation_links(email_request);
 
     assert_eq!(confirmation_links.html, confirmation_links.plain_text);
 }
@@ -182,11 +182,11 @@ async fn subscribing_multiple_times_sends_the_same_confirmation_link_each_time()
 
     // Assert
     let first_request = &test_app.email_server.received_requests().await.unwrap()[0];
-    let first_confirmation_links = test_app.get_confirmation_links(&first_request);
+    let first_confirmation_links = test_app.get_confirmation_links(first_request);
 
     for i in 1..times_clicked {
         let email_request = &test_app.email_server.received_requests().await.unwrap()[i as usize];
-        let confirmation_links = test_app.get_confirmation_links(&email_request);
+        let confirmation_links = test_app.get_confirmation_links(email_request);
 
         assert_eq!(first_confirmation_links.html, confirmation_links.html);
         assert_eq!(

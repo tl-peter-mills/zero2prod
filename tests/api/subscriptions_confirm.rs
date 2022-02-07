@@ -34,7 +34,7 @@ async fn the_link_returned_by_subscribe_returns_a_200_if_called() {
     test_app.post_subscriptions(body.into()).await;
 
     let email_request = &test_app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = test_app.get_confirmation_links(&email_request);
+    let confirmation_links = test_app.get_confirmation_links(email_request);
 
     // Act
     let response = reqwest::get(confirmation_links.html).await.unwrap();
@@ -58,7 +58,7 @@ async fn clicking_on_the_confirmation_link_confirms_a_subscriber() {
     test_app.post_subscriptions(body.into()).await;
 
     let email_request = &test_app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = test_app.get_confirmation_links(&email_request);
+    let confirmation_links = test_app.get_confirmation_links(email_request);
 
     // Act
     reqwest::get(confirmation_links.html)
@@ -86,7 +86,7 @@ async fn clicking_on_the_confirmation_link_multiple_times_confirms_a_subscriber(
     test_app.post_subscriptions(body.into()).await;
 
     let email_request = &test_app.email_server.received_requests().await.unwrap()[0];
-    let confirmation_links = test_app.get_confirmation_links(&email_request);
+    let confirmation_links = test_app.get_confirmation_links(email_request);
 
     let times_clicked = rand::thread_rng().gen_range(2..10);
     // Act
@@ -117,7 +117,7 @@ async fn following_a_confirmation_link_with_an_unknown_token_returns_unauthorize
     test_app.post_subscriptions(body.into()).await;
 
     let email_request = &test_app.email_server.received_requests().await.unwrap()[0];
-    let mut confirmation_links = test_app.get_confirmation_links(&email_request);
+    let mut confirmation_links = test_app.get_confirmation_links(email_request);
     confirmation_links
         .html
         .set_query(Some("subscription_token=unknown-token"));
