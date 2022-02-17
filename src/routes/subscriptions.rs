@@ -1,15 +1,15 @@
 use crate::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use crate::email_client::EmailClient;
 use crate::startup::ApplicationBaseUrl;
+use actix_web::http::StatusCode;
 use actix_web::{web, HttpResponse, ResponseError};
+use anyhow::Context;
 use chrono::Utc;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use sqlx::{PgPool, Postgres, Transaction};
 use std::convert::{TryFrom, TryInto};
 use uuid::Uuid;
-use actix_web::http::StatusCode;
-use anyhow::Context;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -42,8 +42,10 @@ pub async fn subscribe(
     email_client: web::Data<EmailClient>,
     base_url: web::Data<ApplicationBaseUrl>,
 ) -> Result<HttpResponse, SubscribeError> {
-    let new_subscriber: NewSubscriber = form.0.try_into().map_err(SubscribeError::ValidationError)?;
-    let mut transaction = db_pool.begin()
+    let new_subscriber: NewSubscriber =
+        form.0.try_into().map_err(SubscribeError::ValidationError)?;
+    let mut transaction = db_pool
+        .begin()
         .await
         .context("Failed to acquire a Postgres connection from the pool")?;
 
@@ -55,7 +57,7 @@ pub async fn subscribe(
         None => {
             let subscriber_id = insert_subscriber(&mut transaction, &new_subscriber)
                 .await
-                .context( "Failed to insert new subscriber into the database.")?;
+                .context("Failed to insert new subscriber into the database.")?;
             let subscription_token = generate_subscription_token();
             store_token(&mut transaction, subscriber_id, &subscription_token)
                 .await
@@ -66,7 +68,8 @@ pub async fn subscribe(
         Some(subscription_token) => subscription_token,
     };
 
-    transaction.commit()
+    transaction
+        .commit()
         .await
         .context("Failed to commit SQL transaction to store a new subscriber")?;
 
@@ -76,8 +79,8 @@ pub async fn subscribe(
         &base_url.0,
         &subscription_token,
     )
-        .await
-        .context("Failed to send a confirmation email.")?;
+    .await
+    .context("Failed to send a confirmation email.")?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -101,9 +104,7 @@ pub async fn insert_subscriber(
     )
     .execute(transaction)
     .await
-    .map_err(|e| {
-        e
-    })?;
+    .map_err(|e| e)?;
     Ok(subscriber_id)
 }
 
@@ -152,9 +153,7 @@ async fn store_token(
     )
     .execute(transaction)
     .await
-    .map_err(|e| {
-        StoreTokenError(e)
-    })?;
+    .map_err(|e| StoreTokenError(e))?;
     Ok(())
 }
 
