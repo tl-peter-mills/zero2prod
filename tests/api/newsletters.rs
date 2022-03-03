@@ -1,10 +1,10 @@
 use crate::helpers::{spawn_app, ConfirmationLinks, TestApp};
+
+
+
+use uuid::Uuid;
 use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, ResponseTemplate};
-use uuid::Uuid;
-use argon2::{Algorithm, Argon2, Version, Params, PasswordHasher};
-use argon2::password_hash::SaltString;
-use log::warn;
 
 #[actix_rt::test]
 async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {

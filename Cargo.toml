@@ -21,7 +21,7 @@ config = "0.11.0"
 # `#[derive(Serialize)]`and `#[derive(Deserialize)]`.
 # The feature is not enabled by default to avoid pulling in
 # unnecessary dependencies for projects that do not need it.
-serde = { version = "1", features = ["derive"]}
+serde = "1.0.115"
 uuid = { version = "0.8.1", features = ["v4"] }
 chrono = "0.4.15"
 tracing = { version = "0.1", features = ["log"] }
@@ -37,7 +37,7 @@ validator = "0.14.0"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 rand = { version = "0.8", features=["std_rng"] }
 thiserror = "1"
-secrecy = "0.8.0"
+secrecy = { version = "0.8", features = ["serde"] }
 argon2 = { version = "0.3", features = ["std"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 
