@@ -40,6 +40,10 @@ thiserror = "1"
 secrecy = { version = "0.8", features = ["serde"] }
 argon2 = { version = "0.3", features = ["std"] }
 tokio = { version = "1", features = ["rt", "macros"] }
+urlencoding = "2"
+htmlescape = "0.3"
+hmac = { version = "0.11", features = ["std"] }
+sha2 = "0.10"
 
 [dependencies.sqlx]
 version = "0.5.7"
