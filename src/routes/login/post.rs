@@ -1,10 +1,11 @@
 use actix_web::{web, HttpResponse};
 use reqwest::header::LOCATION;
-use secrecy::{Secret, ExposeSecret};
+use secrecy::{Secret};
 use crate::authentication::{Credentials, validate_credentials, AuthError};
 use sqlx::PgPool;
 use crate::routes::error_chain_fmt;
-use hmac::Hmac;
+use actix_web::error::InternalError;
+use actix_web_flash_messages::FlashMessage;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -13,14 +14,13 @@ pub struct FormData {
 }
 
 #[tracing::instrument(
-    skip(form, pool, secret)
+    skip(form, pool)
     fields(username=tracing::field::Empty, user_id=tracing::field::Empty)
 )]
 pub async fn login(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
-    secret: web::Data<Secret<String>>,
-) -> HttpResponse {
+) -> Result<HttpResponse, InternalError<LoginError>> {
     let credentials = Credentials {
         username: form.0.username,
         password: form.0.password,
@@ -32,32 +32,21 @@ pub async fn login(
         Ok(user_id) => {
             tracing::Span::current()
                 .record("user_id", &tracing::field::display(&user_id));
-            HttpResponse::SeeOther()
+            Ok(HttpResponse::SeeOther()
                 .insert_header((LOCATION, "/"))
-                .finish()
+                .finish())
         }
         Err(e) => {
             let e = match e {
                 AuthError::InvalidCredentials(_) => LoginError::AuthError(e.into()),
                 AuthError::UnexpectedError(_) => LoginError::UnexpectedError(e.into()),
             };
-            let query_string = format!(
-                "error={}",
-                urlencoding::Encoded::new(e.to_string())
-            );
-            let hmac_tag = {
-                let mut mac = Hmac::<sha2::Sha256>::new_from_slice(
-                    secret.expose_secret().as_bytes()
-                ).unwrap();
-                mac.update(query_string.as_bytes());
-                mac.finalize().into_bytes()
-            };
-            HttpResponse::SeeOther()
-                .insert_header((
-                    LOCATION,
-                    format!("/login?{}&tag={:x}", query_string, hmac_tag)
-                ))
-                .finish()
+            FlashMessage::error(e.to_string()).send();
+
+            let response = HttpResponse::SeeOther()
+                .insert_header((LOCATION, "/login"))
+                .finish();
+            Err(InternalError::from_response(e, response))
         }
     }
 }
@@ -75,3 +64,4 @@ impl std::fmt::Debug for LoginError {
         error_chain_fmt(self, f)
     }
 }
+
