@@ -1,11 +1,11 @@
-use actix_web::{web, HttpResponse};
-use reqwest::header::LOCATION;
-use secrecy::{Secret};
-use crate::authentication::{Credentials, validate_credentials, AuthError};
-use sqlx::PgPool;
+use crate::authentication::{validate_credentials, AuthError, Credentials};
 use crate::routes::error_chain_fmt;
 use actix_web::error::InternalError;
+use actix_web::{web, HttpResponse};
 use actix_web_flash_messages::FlashMessage;
+use reqwest::header::LOCATION;
+use secrecy::Secret;
+use sqlx::PgPool;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -25,13 +25,11 @@ pub async fn login(
         username: form.0.username,
         password: form.0.password,
     };
-    tracing::Span::current()
-        .record("username", &tracing::field::display(&credentials.username));
+    tracing::Span::current().record("username", &tracing::field::display(&credentials.username));
 
     match validate_credentials(credentials, &pool).await {
         Ok(user_id) => {
-            tracing::Span::current()
-                .record("user_id", &tracing::field::display(&user_id));
+            tracing::Span::current().record("user_id", &tracing::field::display(&user_id));
             Ok(HttpResponse::SeeOther()
                 .insert_header((LOCATION, "/"))
                 .finish())
@@ -64,4 +62,3 @@ impl std::fmt::Debug for LoginError {
         error_chain_fmt(self, f)
     }
 }
-

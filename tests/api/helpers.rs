@@ -25,7 +25,7 @@ pub struct TestApp {
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
-    pub api_client: reqwest::Client
+    pub api_client: reqwest::Client,
 }
 
 pub struct ConfirmationLinks {
@@ -36,7 +36,7 @@ pub struct ConfirmationLinks {
 impl TestApp {
     pub async fn post_login<Body>(&self, body: &Body) -> reqwest::Response
     where
-        Body: serde::Serialize
+        Body: serde::Serialize,
     {
         self.api_client
             .post(&format!("{}/login", &self.address))
@@ -170,7 +170,7 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         port: application_port,
         test_user: TestUser::generate(),
-        api_client: client
+        api_client: client,
     };
     test_app.test_user.store(&test_app.db_pool).await;
 

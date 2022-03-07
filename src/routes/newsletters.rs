@@ -5,10 +5,10 @@ use crate::routes::error_chain_fmt;
 
 use actix_web::http::header::{HeaderMap, HeaderValue};
 use actix_web::http::{header, StatusCode};
-use actix_web::{web, HttpResponse, ResponseError, HttpRequest};
+use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
 use anyhow::Context;
 
-use secrecy::{Secret};
+use secrecy::Secret;
 use sqlx::PgPool;
 
 #[derive(thiserror::Error)]
