@@ -1,7 +1,7 @@
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
-use reqwest::Url;
+use reqwest::{Url, Response};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::MockServer;
@@ -47,8 +47,32 @@ impl TestApp {
     }
 
     pub async fn get_login(&self) -> reqwest::Response {
+        self.get_route(String::from("/login")).await
+    }
+
+    pub async fn get_admin_dashboard(&self) -> reqwest::Response {
+        self.get_route(String::from("/admin/dashboard")).await
+    }
+
+    pub async fn get_change_password(&self) -> reqwest::Response {
+        self.get_route(String::from("/admin/password")).await
+    }
+
+    pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
+        where
+            Body: serde::Serialize,
+    {
         self.api_client
-            .get(&format!("{}/login", &self.address))
+            .post(&format!("{}/admin/password", &self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+
+    pub async fn post_logout(&self) -> reqwest::Response {
+        self.api_client
+            .post(&format!("{}/admin/logout", &self.address))
             .send()
             .await
             .expect("Failed to execute request.")
@@ -94,6 +118,14 @@ impl TestApp {
         let plain_text = get_link(body["TextBody"].as_str().unwrap());
 
         ConfirmationLinks { html, plain_text }
+    }
+
+    async fn get_route(&self, route: String) -> Response {
+        self.api_client
+            .get(&format!("{}{}", &self.address, route))
+            .send()
+            .await
+            .expect("Failed to execute request.")
     }
 }
 
