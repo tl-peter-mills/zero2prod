@@ -32,9 +32,9 @@ pub async fn validate_credentials(
     );
 
     if let Some((stored_user_id, stored_password_hash)) =
-        get_stored_credentials(&credentials.username, pool)
-            .await
-            .map_err(AuthError::UnexpectedError)?
+    get_stored_credentials(&credentials.username, pool)
+        .await
+        .map_err(AuthError::UnexpectedError)?
     {
         // Only set to some if the user id is found
         user_id = Some(stored_user_id);
@@ -44,8 +44,8 @@ pub async fn validate_credentials(
     spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
-    .await
-    .context("Failed to spawn blocking task.")??;
+        .await
+        .context("Failed to spawn blocking task.")??;
 
     user_id
         .ok_or_else(|| anyhow::anyhow!("Unknown username."))
@@ -126,9 +126,9 @@ async fn get_stored_credentials(
         "#,
         username,
     )
-    .fetch_optional(pool)
-    .await
-    .context("Failed to perform a query to retrieve stored credentials.")?
-    .map(|row| (row.user_id, Secret::new(row.password_hash)));
+        .fetch_optional(pool)
+        .await
+        .context("Failed to perform a query to retrieve stored credentials.")?
+        .map(|row| (row.user_id, Secret::new(row.password_hash)));
     Ok(row)
 }
