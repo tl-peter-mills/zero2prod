@@ -1,10 +1,10 @@
-use actix_web::{HttpResponse, web};
-use secrecy::{Secret, ExposeSecret};
-use crate::utils::{e500, see_login, see_other};
-use actix_web_flash_messages::FlashMessage;
-use sqlx::PgPool;
+use crate::authentication::{validate_credentials, AuthError, Credentials, UserId};
 use crate::routes::admin::admin_dashboard::get_username;
-use crate::authentication::{Credentials, validate_credentials, AuthError, UserId};
+use crate::utils::{e500, see_other};
+use actix_web::{web, HttpResponse};
+use actix_web_flash_messages::FlashMessage;
+use secrecy::{ExposeSecret, Secret};
+use sqlx::PgPool;
 use validator::HasLen;
 
 #[derive(serde::Deserialize)]
@@ -17,7 +17,7 @@ pub struct FormData {
 pub async fn change_password(
     form: web::Form<FormData>,
     pool: web::Data<PgPool>,
-    user_id: web::ReqData<UserId>
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let user_id = user_id.into_inner();
     if form.new_password.expose_secret() != form.new_password_check.expose_secret() {
@@ -39,14 +39,15 @@ pub async fn change_password(
                 Ok(see_admin_password())
             }
             AuthError::UnexpectedError(_) => Err(e500(e).into()),
-        }
+        };
     }
     if let Err(e) = validate_password(&form.0.new_password) {
         FlashMessage::error(e.to_string()).send();
         return Ok(see_admin_password());
     }
     crate::authentication::change_password(*user_id, form.0.new_password, &pool)
-        .await.map_err(e500)?;
+        .await
+        .map_err(e500)?;
     FlashMessage::info("Your password has been changed.").send();
     Ok(see_other("/admin/password"))
 }
@@ -57,11 +58,15 @@ fn see_admin_password() -> HttpResponse {
 
 fn validate_password(password: &Secret<String>) -> Result<(), anyhow::Error> {
     if password.expose_secret().length() < 12 {
-        return Err(anyhow::anyhow!("The new password must be at least 12 characters."));
+        return Err(anyhow::anyhow!(
+            "The new password must be at least 12 characters."
+        ));
     }
 
     if password.expose_secret().length() > 128 {
-        return Err(anyhow::anyhow!("The new password must be shorter than 128 characters."));
+        return Err(anyhow::anyhow!(
+            "The new password must be shorter than 128 characters."
+        ));
     }
 
     Ok(())

@@ -1,14 +1,14 @@
-use actix_web::{web, HttpResponse};
-use uuid::Uuid;
-use sqlx::PgPool;
-use actix_web::http::header::ContentType;
-use anyhow::Context;
-use crate::utils::{e500, see_login};
 use crate::authentication::UserId;
+use crate::utils::e500;
+use actix_web::http::header::ContentType;
+use actix_web::{web, HttpResponse};
+use anyhow::Context;
+use sqlx::PgPool;
+use uuid::Uuid;
 
 pub async fn admin_dashboard(
     pool: web::Data<PgPool>,
-    user_id: web::ReqData<UserId>
+    user_id: web::ReqData<UserId>,
 ) -> Result<HttpResponse, actix_web::Error> {
     let user_id = user_id.into_inner();
     let username = get_username(*user_id, &pool).await.map_err(e500)?;
@@ -41,10 +41,7 @@ pub async fn admin_dashboard(
 }
 
 #[tracing::instrument(name = "Get username", skip(pool))]
-pub async fn get_username(
-    user_id: Uuid,
-    pool: &PgPool
-) -> Result<String, anyhow::Error> {
+pub async fn get_username(user_id: Uuid, pool: &PgPool) -> Result<String, anyhow::Error> {
     let row = sqlx::query!(
         r#"
         SELECT username
@@ -53,10 +50,8 @@ pub async fn get_username(
         "#,
         user_id
     )
-        .fetch_one(pool)
-        .await
-        .context("A database error was encountered while trying to get a username.")?;
+    .fetch_one(pool)
+    .await
+    .context("A database error was encountered while trying to get a username.")?;
     Ok(row.username)
 }
-
-
