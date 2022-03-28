@@ -1,8 +1,8 @@
 use actix_session::{Session, SessionExt};
-use uuid::Uuid;
-use actix_web::{FromRequest, HttpRequest};
-use std::future::{Ready, ready};
 use actix_web::dev::Payload;
+use actix_web::{FromRequest, HttpRequest};
+use std::future::{ready, Ready};
+use uuid::Uuid;
 
 pub struct TypedSession(Session);
 

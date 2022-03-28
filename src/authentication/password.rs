@@ -1,9 +1,9 @@
 use crate::telemetry::spawn_blocking_with_tracing;
 use anyhow::Context;
-use argon2::{Argon2, PasswordHash, PasswordVerifier, Params, PasswordHasher, Algorithm, Version};
+use argon2::password_hash::SaltString;
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
-use argon2::password_hash::SaltString;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AuthError {
@@ -32,9 +32,9 @@ pub async fn validate_credentials(
     );
 
     if let Some((stored_user_id, stored_password_hash)) =
-    get_stored_credentials(&credentials.username, pool)
-        .await
-        .map_err(AuthError::UnexpectedError)?
+        get_stored_credentials(&credentials.username, pool)
+            .await
+            .map_err(AuthError::UnexpectedError)?
     {
         // Only set to some if the user id is found
         user_id = Some(stored_user_id);
@@ -44,8 +44,8 @@ pub async fn validate_credentials(
     spawn_blocking_with_tracing(move || {
         verify_password_hash(expected_password_hash, credentials.password)
     })
-        .await
-        .context("Failed to spawn blocking task.")??;
+    .await
+    .context("Failed to spawn blocking task.")??;
 
     user_id
         .ok_or_else(|| anyhow::anyhow!("Unknown username."))
@@ -58,9 +58,7 @@ pub async fn change_password(
     password: Secret<String>,
     pool: &PgPool,
 ) -> Result<(), anyhow::Error> {
-    let password_hash = spawn_blocking_with_tracing(
-        move || compute_password_hash(password)
-    )
+    let password_hash = spawn_blocking_with_tracing(move || compute_password_hash(password))
         .await?
         .context("Failed to hash password")?;
 
@@ -73,23 +71,21 @@ pub async fn change_password(
         password_hash.expose_secret(),
         user_id
     )
-        .execute(pool)
-        .await
-        .context("Failed to change user's password in the database.")?;
+    .execute(pool)
+    .await
+    .context("Failed to change user's password in the database.")?;
     Ok(())
 }
 
-fn compute_password_hash(
-    password: Secret<String>
-) -> Result<Secret<String>, anyhow::Error> {
+fn compute_password_hash(password: Secret<String>) -> Result<Secret<String>, anyhow::Error> {
     let salt = SaltString::generate(&mut rand::thread_rng());
     let password_hash = Argon2::new(
         Algorithm::Argon2id,
         Version::V0x13,
         Params::new(15000, 2, 1, None).unwrap(),
     )
-        .hash_password(password.expose_secret().as_bytes(), &salt)?
-        .to_string();
+    .hash_password(password.expose_secret().as_bytes(), &salt)?
+    .to_string();
     Ok(Secret::new(password_hash))
 }
 
@@ -126,9 +122,9 @@ async fn get_stored_credentials(
         "#,
         username,
     )
-        .fetch_optional(pool)
-        .await
-        .context("Failed to perform a query to retrieve stored credentials.")?
-        .map(|row| (row.user_id, Secret::new(row.password_hash)));
+    .fetch_optional(pool)
+    .await
+    .context("Failed to perform a query to retrieve stored credentials.")?
+    .map(|row| (row.user_id, Secret::new(row.password_hash)));
     Ok(row)
 }

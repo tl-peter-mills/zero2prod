@@ -25,7 +25,10 @@ async fn logout_clears_session_state() {
     });
     let response = app.post_login(&login_body).await;
     assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), "/admin/dashboard");
+    assert_eq!(
+        response.headers().get("Location").unwrap(),
+        "/admin/dashboard"
+    );
 
     // Act - Follow the redirect
     let response = app.get_admin_dashboard().await;

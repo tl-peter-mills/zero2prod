@@ -1,7 +1,7 @@
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use once_cell::sync::Lazy;
-use reqwest::{Url, Response};
+use reqwest::{Response, Url};
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use wiremock::MockServer;
@@ -46,6 +46,13 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
+    pub async fn post_test_user_login(&self) -> reqwest::Response {
+        self.post_login(&serde_json::json!({
+            "username": &self.test_user.username,
+            "password": &self.test_user.password
+        })).await
+    }
+
     pub async fn get_login(&self) -> reqwest::Response {
         self.get_route(String::from("/login")).await
     }
@@ -58,9 +65,13 @@ impl TestApp {
         self.get_route(String::from("/admin/password")).await
     }
 
+    pub async fn get_send_newsletter(& self) -> reqwest::Response {
+        self.get_route(String::from("/admin/newsletters")).await
+    }
+
     pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
-        where
-            Body: serde::Serialize,
+    where
+        Body: serde::Serialize,
     {
         self.api_client
             .post(&format!("{}/admin/password", &self.address))
@@ -88,11 +99,13 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_newsletters(&self, body: serde_json::Value) -> reqwest::Response {
+    pub async fn post_newsletters<Body>(&self, body: &Body) -> reqwest::Response
+    where
+        Body: serde::Serialize,
+    {
         self.api_client
-            .post(&format!("{}/newsletters", &self.address))
-            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
-            .json(&body)
+            .post(&format!("{}/admin/newsletters", &self.address))
+            .form(body)
             .send()
             .await
             .expect("Failed to execute request.")
