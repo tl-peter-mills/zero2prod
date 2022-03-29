@@ -46,27 +46,36 @@ impl TestApp {
             .expect("Failed to execute request.")
     }
 
-    pub async fn post_test_user_login(&self) -> reqwest::Response {
-        self.post_login(&serde_json::json!({
-            "username": &self.test_user.username,
-            "password": &self.test_user.password
-        })).await
-    }
-
     pub async fn get_login(&self) -> reqwest::Response {
         self.get_route(String::from("/login")).await
+    }
+
+    pub async fn get_login_html(& self) -> String {
+        get_html(self.get_login().await).await
     }
 
     pub async fn get_admin_dashboard(&self) -> reqwest::Response {
         self.get_route(String::from("/admin/dashboard")).await
     }
 
+    pub async fn get_admin_dashboard_html(& self) -> String {
+        get_html(self.get_admin_dashboard().await).await
+    }
+
     pub async fn get_change_password(&self) -> reqwest::Response {
         self.get_route(String::from("/admin/password")).await
     }
 
+    pub async fn get_change_password_html(& self) -> String {
+        get_html(self.get_change_password().await).await
+    }
+
     pub async fn get_send_newsletter(& self) -> reqwest::Response {
         self.get_route(String::from("/admin/newsletters")).await
+    }
+
+    pub async fn get_send_newsletter_html(& self) -> String {
+        get_html(self.get_send_newsletter().await).await
     }
 
     pub async fn post_change_password<Body>(&self, body: &Body) -> reqwest::Response
@@ -157,6 +166,13 @@ impl TestUser {
         }
     }
 
+    pub async fn login(&self, app: &TestApp) -> reqwest::Response {
+        app.post_login(&serde_json::json!({
+            "username": &self.username,
+            "password": &self.password
+        })).await
+    }
+
     async fn store(&self, pool: &PgPool) {
         let salt = SaltString::generate(&mut rand::thread_rng());
         let password_hash = Argon2::new(
@@ -222,6 +238,11 @@ pub async fn spawn_app() -> TestApp {
     test_app
 }
 
+pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
+    assert_eq!(response.status().as_u16(), 303);
+    assert_eq!(response.headers().get("Location").unwrap(), location);
+}
+
 async fn configure_database(config: &DatabaseSettings) -> PgPool {
     let mut connection = PgConnection::connect_with(&config.without_db())
         .await
@@ -241,4 +262,8 @@ async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .expect("Failed to migrate the database");
 
     connection_pool
+}
+
+async fn get_html(req: reqwest::Response) -> String {
+    req.text().await.unwrap()
 }

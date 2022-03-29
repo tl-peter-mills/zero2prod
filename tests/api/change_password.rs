@@ -1,4 +1,4 @@
-use crate::helpers::spawn_app;
+use crate::helpers::{spawn_app, assert_is_redirect_to};
 use fake::faker::internet::en::Password;
 use fake::Fake;
 use serde_json::Value;
@@ -13,8 +13,7 @@ async fn you_must_be_logged_in_to_see_the_change_password_form() {
     let response = app.get_change_password().await;
 
     // Assert
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), "/login");
+    assert_is_redirect_to(&response,"/login");
 }
 
 #[actix_rt::test]
@@ -33,8 +32,7 @@ async fn you_must_be_logged_in_to_change_your_password() {
         .await;
 
     // Assert
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), "/login");
+    assert_is_redirect_to(&response,"/login");
 }
 
 #[actix_rt::test]
@@ -45,7 +43,7 @@ async fn new_password_fields_must_match() {
     let another_new_password = Uuid::new_v4().to_string();
 
     // Act - Login
-    app.post_test_user_login().await;
+    app.test_user.login(&app).await;
 
     // Act - Try to change password
     let response = app
@@ -55,15 +53,10 @@ async fn new_password_fields_must_match() {
             &another_new_password,
         ))
         .await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/password"
-    );
+    assert_is_redirect_to(&response,"/admin/password");
 
     // Act - Follow the redirect
-    let response = app.get_change_password().await;
-    let html_page = response.text().await.unwrap();
+    let html_page = app.get_change_password_html().await;
     assert!(html_page.contains(
         "<p><i>You entered two different new passwords - the field values must match.</i></p>"
     ));
@@ -77,7 +70,7 @@ async fn current_password_must_be_valid() {
     let wrong_password = Uuid::new_v4().to_string();
 
     // Act - Login
-    app.post_test_user_login().await;
+    app.test_user.login(&app).await;
 
     // Act - Try to change password
     let response = app
@@ -87,15 +80,10 @@ async fn current_password_must_be_valid() {
             &new_password,
         ))
         .await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/password"
-    );
+    assert_is_redirect_to(&response,"/admin/password");
 
     // Act - Follow the redirect
-    let response = app.get_change_password().await;
-    let html_page = response.text().await.unwrap();
+    let html_page = app.get_change_password_html().await;
     assert!(html_page.contains("<p><i>The current password is incorrect.</i></p>"));
 }
 
@@ -116,7 +104,7 @@ async fn current_password_must_be_correct_length() {
 
     for (invalid_password, error_message) in test_cases {
         // Act - Login
-        app.post_test_user_login().await;
+        app.test_user.login(&app).await;
 
         let invalid_password = invalid_password.as_str();
 
@@ -128,15 +116,10 @@ async fn current_password_must_be_correct_length() {
                 invalid_password,
             ))
             .await;
-        assert_eq!(response.status().as_u16(), 303);
-        assert_eq!(
-            response.headers().get("Location").unwrap(),
-            "/admin/password"
-        );
+        assert_is_redirect_to(&response,"/admin/password");
 
         // Act - Follow the redirect
-        let response = app.get_change_password().await;
-        let html_page = response.text().await.unwrap();
+        let html_page = app.get_change_password_html().await;
         assert!(html_page.contains(format!("<p><i>{}</i></p>", &error_message).as_str()));
     }
 }
@@ -147,12 +130,8 @@ async fn changing_password_works() {
     let new_password = Uuid::new_v4().to_string();
 
     // Act - Login
-    let response = app.post_test_user_login().await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/dashboard"
-    );
+    let response = app.test_user.login(&app).await;
+    assert_is_redirect_to(&response,"/admin/dashboard");
 
     // Act - Change password
     let response = app
@@ -162,25 +141,18 @@ async fn changing_password_works() {
             &new_password,
         ))
         .await;
-
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/password"
-    );
+    assert_is_redirect_to(&response,"/admin/password");
 
     // Act - Follow the redirect
-    let html_page = app.get_change_password().await.text().await.unwrap();
+    let html_page = app.get_change_password_html().await;
     assert!(html_page.contains("<p><i>Your password has been changed.</i></p>"));
 
     // Act - Logout
     let response = app.post_logout().await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), "/login");
+    assert_is_redirect_to(&response,"/login");
 
     // Act - Follow the redirect
-    let response = app.get_login().await;
-    let html_page = response.text().await.unwrap();
+    let html_page = app.get_login_html().await;
     assert!(html_page.contains(r#"<p><i>You have successfully logged out.</i></p>"#));
 
     // Act - Login using the new password
@@ -190,11 +162,7 @@ async fn changing_password_works() {
             "password": &new_password
         }))
         .await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/dashboard"
-    );
+    assert_is_redirect_to(&response,"/admin/dashboard");
 }
 
 fn create_change_password_body(

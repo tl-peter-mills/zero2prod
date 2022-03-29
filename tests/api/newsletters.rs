@@ -1,4 +1,4 @@
-use crate::helpers::{spawn_app, ConfirmationLinks, TestApp};
+use crate::helpers::{spawn_app, ConfirmationLinks, TestApp, assert_is_redirect_to};
 
 
 use wiremock::matchers::{any, method, path};
@@ -13,8 +13,7 @@ async fn you_must_be_logged_in_to_see_the_send_newsletter_form() {
     let response = app.get_send_newsletter().await;
 
     // Assert
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), "/login");
+    assert_is_redirect_to(&response,"/login");
 }
 
 #[actix_rt::test]
@@ -23,11 +22,16 @@ async fn you_must_be_logged_in_to_publish_a_newsletter() {
     let app = spawn_app().await;
 
     // Act
-    let response = app.get_send_newsletter().await;
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "text_content": "Newsletter body as plain text",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
+    });
+    let response = app.post_newsletters(&newsletter_request_body).await;
 
     // Assert
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(response.headers().get("Location").unwrap(), "/login");
+    assert_is_redirect_to(&response,"/login");
 }
 
 #[actix_rt::test]
@@ -43,20 +47,17 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         .await;
 
     // Act - Login
-    app.post_test_user_login().await;
+    app.test_user.login(&app).await;
 
     // Act - Publish the newsletter
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
         "html_content": "<p>Newsletter body as HTML</p>",
         "text_content": "Newsletter body as plain text",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
     });
     let response = app.post_newsletters(&newsletter_request_body).await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/newsletters"
-    );
+    assert_is_redirect_to(&response,"/admin/newsletters");
 
     // Act - Follow the redirect
     let response = app.get_send_newsletter().await;
@@ -77,24 +78,20 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         .await;
 
     // Act - Login
-    app.post_test_user_login().await;
+    app.test_user.login(&app).await;
 
     // Act - Publish the newsletter
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
         "html_content": "<p>Newsletter body as HTML</p>",
         "text_content": "Newsletter body as plain text",
+        "idempotency_key": uuid::Uuid::new_v4().to_string(),
     });
     let response = app.post_newsletters(&newsletter_request_body).await;
-    assert_eq!(response.status().as_u16(), 303);
-    assert_eq!(
-        response.headers().get("Location").unwrap(),
-        "/admin/newsletters"
-    );
+    assert_is_redirect_to(&response, "/admin/newsletters");
 
     // Act - Follow the redirect
-    let response = app.get_send_newsletter().await;
-    let html_page = response.text().await.unwrap();
+    let html_page = app.get_send_newsletter_html().await;
     assert!(html_page.contains(r#"<p><i>Newsletter "Newsletter title" has been published.</i></p>"#));
 }
 
@@ -128,7 +125,7 @@ async fn newsletters_returns_400_for_invalid_data() {
 
     for (invalid_body, error_message) in test_cases {
         // Act - Login
-        app.post_test_user_login().await;
+        app.test_user.login(&app).await;
 
         // Act - Publish the newsletter
         let response = app.post_newsletters(&invalid_body).await;
@@ -139,6 +136,44 @@ async fn newsletters_returns_400_for_invalid_data() {
             error_message
         )
     }
+}
+
+#[actix_rt::test]
+async fn newsletter_creation_is_idempotent() {
+    // Arrange
+    let app = spawn_app().await;
+    create_confirmed_subscriber(&app).await;
+    app.test_user.login(&app).await;
+
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
+    // Act - Submit newsletter form
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "html_content": "<p>Newsletter body as HTML</p>",
+        "text_content": "Newsletter body as plain text",
+        "idempotency_key": uuid::Uuid::new_v4().to_string()
+    });
+    let response = app.post_newsletters(&newsletter_request_body).await;
+    assert_is_redirect_to(&response, "/admin/newsletters");
+
+    // Act - Follow the redirect
+    let html_page = app.get_send_newsletter_html().await;
+    assert!(html_page.contains(r#"<p><i>Newsletter "Newsletter title" has been published.</i></p>"#));
+
+    // Act - Submit newsletter form a 2nd time
+    let response = app.post_newsletters(&newsletter_request_body).await;
+    assert_is_redirect_to(&response, "/admin/newsletters");
+
+    // Act - Follow the redirect
+    let html_page = app.get_send_newsletter_html().await;
+    assert!(html_page.contains(r#"<p><i>Newsletter "Newsletter title" has been published.</i></p>"#));
+
+    // Mock verifies we have only sent the email once when it is dropped
 }
 
 async fn create_unconfirmed_subscriber(app: &TestApp) -> ConfirmationLinks {
